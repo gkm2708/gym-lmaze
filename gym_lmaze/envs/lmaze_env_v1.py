@@ -10,32 +10,28 @@ plt.show(block=False)
 class LmazeEnv_v1(gym.Env):
   metadata = {'render.modes': ['human']}
 
+  """    
+  """
   def __init__(self):
     print("init-init")
     self.action_space = spaces.Discrete(4)
     self.realgrid = 14
     self.expansionRatio = 7
     self.fovea = 5
-    #self.gridsize = self.realgrid * self.expansionRatio
     self.gridsize = self.fovea * self.expansionRatio
     self.observation_space = gym.spaces.Box(0.0, 1.0, shape=(4,self.gridsize,self.gridsize))
     self.negativeNominal = -1.0
-    self.positiveNominal = 0.0
+    self.positiveNominal = 0.01
     self.positiveFull = 1.0
     self.RANDOM_BALL = False
-    self.VISUALIZE = True
+    self.VISUALIZE = False
     self.f_goal_x = 0
     self.f_goal_y = 0
     self.localDone = False
+    self.stepCount = 0
+    self.fovealStepCount = 0
 
-    """self.gri = np.array(  [['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
-                            ['W', 'S', 'B', 'B', 'B', 'W', 'W', 'B'],
-                            ['W', 'B', 'W', 'W', 'W', 'W', 'W', 'B'],
-                            ['W', 'B', 'W', 'B', 'W', 'B', 'B', 'B'],
-                            ['W', 'B', 'W', 'B', 'W', 'B', 'W', 'W'],
-                            ['W', 'B', 'B', 'B', 'W', 'X', 'W', 'W'],
-                            ['W', 'B', 'W', 'B', 'W', 'B', 'W', 'W'],
-                            ['W', 'B', 'W', 'B', 'W', 'B', 'W', 'W']])"""
+    self.visualFile = open("visualize.txt", "r")
 
     self.grid = np.array(       [['W','W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
                                 ['W','W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
@@ -52,46 +48,10 @@ class LmazeEnv_v1(gym.Env):
                                 ['W','W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
                                 ['W','W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W']])
 
-    """
-    self.grid = np.chararray((self.gridsize,self.gridsize))
-
-    i = 0
-    while i < self.gri.shape[0]:
-        ii = 0
-        for ii in range(0,self.expansionRatio):
-            j = 0
-            while j < self.gri.shape[1]:
-                jj = 0
-                for jj in range(0,self.expansionRatio):
-                    self.grid[i*self.expansionRatio + ii][j*self.expansionRatio + jj] = self.gri[i][j]
-                    #print(i*self.expansionRatio + ii,j*self.expansionRatio + jj)
-                    #print(i,j)
-                    jj += 1
-                j += 1
-            ii += 1
-        i += 1
-    """
-
     self.state = np.zeros((self.realgrid * self.realgrid * 4), dtype=np.float32)
 
     self.reset()
     print("init-end")
-
-
-
-
-
-
-
-  def render(self, mode='human', close=False):
-    if(mode == 'human'):
-        self.VISUALIZE = True
-
-
-
-
-
-
 
   """             Reset-Initialize Handle           """
   """    
@@ -123,110 +83,27 @@ class LmazeEnv_v1(gym.Env):
     self.goal_x = s1[0][0]
     self.goal_y = s1[1][0]
 
-    self.reward = -0.0
+    self.originalReward = -0.0
+    self.fovealReward = -0.0
+
     self.stepCount = 0
+    #self.fovealStepCount = 0
+
     self.img = None
 
+    #self.VISUALIZE = self.visualFile.readline()
+    #print(self.visualFile.readline())
     return self.getGlobalView()
-
-
-
-
 
   """    
   """
   def setFovealGoal(self,msg0,msg1):
       # translate to global goal position for the loacl value
-      # set it as the goal
+      # set it as the foveal goal
       self.f_goal_x = self.ball_x0 + msg0 - 2
       self.f_goal_y = self.ball_y0 + msg1 - 2
-      # return the environment view
+      self.fovealStepCount = 0
       return self.getLocalView()
-
-
-
-
-  """    
-  """
-  def getGlobalView(self):
-
-      retState = np.concatenate(
-          (np.reshape(self.state[0 * self.realgrid * self.realgrid: 1 * self.realgrid * self.realgrid],
-                      ((1, self.realgrid, self.realgrid))),
-           np.reshape(self.state[1 * self.realgrid * self.realgrid: 2 * self.realgrid * self.realgrid],
-                      ((1, self.realgrid, self.realgrid))),
-           np.reshape(self.state[2 * self.realgrid * self.realgrid: 3 * self.realgrid * self.realgrid],
-                      ((1, self.realgrid, self.realgrid))),
-           np.reshape(self.state[3 * self.realgrid * self.realgrid: 4 * self.realgrid * self.realgrid],
-                      ((1, self.realgrid, self.realgrid)))), axis=0)
-
-      retState = np.asarray(retState[:, self.ball_x0 - 2:self.ball_x0 + 3, self.ball_y0 - 2:self.ball_y0 + 3])
-
-      retStateExpanded = np.zeros((4, retState.shape[1] * self.expansionRatio, retState.shape[2] * self.expansionRatio),
-                                  dtype=np.float32)
-
-      channel = 0
-      while channel < retState.shape[0]:
-          i = 0
-          while i < retState.shape[1]:
-              ii = 0
-              for ii in range(0, self.expansionRatio):
-                  j = 0
-                  while j < retState.shape[2]:
-                      jj = 0
-                      for jj in range(0, self.expansionRatio):
-                          retStateExpanded[channel][i * self.expansionRatio + ii][j * self.expansionRatio + jj] = \
-                          retState[channel][i][j]
-                          jj += 1
-                      j += 1
-                  ii += 1
-              i += 1
-          channel += 1
-
-      return retStateExpanded
-
-
-
-
-  """    
-  """
-  def getLocalView(self):
-
-      retState = np.concatenate(
-          (np.reshape(self.state[0 * self.realgrid * self.realgrid: 1 * self.realgrid * self.realgrid],
-                      ((1, self.realgrid, self.realgrid))),
-           np.reshape(self.state[1 * self.realgrid * self.realgrid: 2 * self.realgrid * self.realgrid],
-                      ((1, self.realgrid, self.realgrid))),
-           np.reshape(self.state[2 * self.realgrid * self.realgrid: 3 * self.realgrid * self.realgrid],
-                      ((1, self.realgrid, self.realgrid))),
-           np.reshape(self.state[3 * self.realgrid * self.realgrid: 4 * self.realgrid * self.realgrid],
-                      ((1, self.realgrid, self.realgrid)))), axis=0)
-
-      retState = np.asarray(retState[:, self.f_goal_x - 2:self.f_goal_x + 3, self.f_goal_y - 2:self.f_goal_y + 3])
-
-      retStateExpanded = np.zeros((4, retState.shape[1] * self.expansionRatio, retState.shape[2] * self.expansionRatio),
-                                  dtype=np.float32)
-
-      channel = 0
-      while channel < retState.shape[0]:
-          i = 0
-          while i < retState.shape[1]:
-              ii = 0
-              for ii in range(0, self.expansionRatio):
-                  j = 0
-                  while j < retState.shape[2]:
-                      jj = 0
-                      for jj in range(0, self.expansionRatio):
-                          retStateExpanded[channel][i * self.expansionRatio + ii][j * self.expansionRatio + jj] = \
-                          retState[channel][i][j]
-                          jj += 1
-                      j += 1
-                  ii += 1
-              i += 1
-          channel += 1
-      return retStateExpanded
-
-
 
   """
   """
@@ -234,29 +111,27 @@ class LmazeEnv_v1(gym.Env):
 
     """ Build Action Value to be used for ball position update """
     self.stepCount += 1
+    self.fovealStepCount += 1
 
-    o_x = 0
-    o_y = 0
+    self.fovealReward = -0.0
+    self.originalReward = -0.0
+
+    self.localDone = False
+
+    o_x, o_y = 0, 0
     if msg == 0:
-        #print("Action 0")
-        o_x = -1
-        o_y = 0
+        o_x, o_y = -1, 0
     elif msg == 1:
-        #print("Action 1")
-        o_x = 1
-        o_y = 0
+        o_x, o_y = 1, 0
     elif msg == 2:
-        #print("Action 2")
-        o_x = 0
-        o_y = -1
+        o_x, o_y = 0, -1
     elif msg == 3:
-        #print("Action 3")
-        o_x = 0
-        o_y = 1
+        o_x, o_y = 0, 1
 
     if self.grid[self.ball_x0 + o_x][self.ball_y0 + o_y] == 'W':
         # position unchanged small negative reward
-        self.reward = self.negativeNominal
+        self.originalReward = self.negativeNominal
+        self.fovealReward = self.negativeNominal
 
     elif self.grid[self.ball_x0 + o_x][self.ball_y0 + o_y] == 'B':
         # position changed small positive reward
@@ -267,29 +142,41 @@ class LmazeEnv_v1(gym.Env):
 
         self.state[0*self.realgrid*self.realgrid+(self.ball_x0)*self.realgrid+self.ball_y0] = 1.0
 
-        # if the goal goes out of view of agent after this movement
-        if (self.ball_x0 > self.f_goal_x - 2 or self.ball_x0 < self.f_goal_x +3 \
-                or self.ball_y0 > self.f_goal_y - 2 or self.ball_y0 < self.f_goal_y +3):
-            print(self.ball_x0 > self.f_goal_x - 2, self.ball_x0 < self.f_goal_x +3,
-                 self.ball_y0 > self.f_goal_y - 2, self.ball_y0 < self.f_goal_y +3)
-            self.stepCount = 0
-            self.localDone = True
+        self.originalReward = self.positiveNominal
+        self.fovealReward = self.positiveNominal
 
-        self.reward = self.positiveNominal
+        # if the goal goes out of view of agent after this movement
+        if (self.ball_x0 < self.f_goal_x - 1 or self.ball_x0 > self.f_goal_x +2 \
+                or self.ball_y0 < self.f_goal_y - 1 or self.ball_y0 > self.f_goal_y +2):
+            #print("Local Goal out of fovea")
+            #print(self.ball_x0, self.f_goal_x - 1, self.ball_x0, self.f_goal_x +2, self.ball_y0, self.f_goal_y - 1, self.ball_y0, self.f_goal_y +2)
+            self.localDone = True
+            self.fovealReward = self.negativeNominal
+        elif self.ball_y0 == self.f_goal_y and self.ball_x0 == self.f_goal_x:
+            #print("Local Goal acheived")
+            #print(self.ball_x0, self.f_goal_x, self.ball_y0, self.f_goal_y)
+            self.localDone = True
+            self.fovealReward = self.positiveFull
 
     elif self.grid[self.ball_x0 + o_x][self.ball_y0 + o_y] == 'X':
         # position changed full reward
+        #print("Global Goal acheived")
+
         self.state[0*self.realgrid*self.realgrid+(self.ball_x0)*self.realgrid+self.ball_y0] = 0.0
 
         self.ball_x0 = self.ball_x0 + o_x
         self.ball_y0 = self.ball_y0 + o_y
 
         self.state[0*self.realgrid*self.realgrid+(self.ball_x0)*self.realgrid+self.ball_y0] = 1.0
-        self.reward = self.positiveFull
+        self.originalReward = self.positiveFull
 
-
-
-
+        if self.ball_y0 == self.f_goal_y and self.ball_x0 == self.f_goal_x:
+            #print("Local Goal acheived")
+            #print(self.ball_x0, self.f_goal_x, self.ball_y0, self.f_goal_y)
+            self.localDone = True
+            self.fovealReward = self.positiveFull
+        else:
+            self.fovealReward = self.positiveNominal
 
     if self.VISUALIZE:
         image = np.asarray(([200 if item == 1.0 else 0 for item in self.state[1 * self.realgrid * self.realgrid : 2 * self.realgrid * self.realgrid]]), dtype=np.uint8)
@@ -306,30 +193,128 @@ class LmazeEnv_v1(gym.Env):
         plt.pause(.01)
         plt.draw()
 
-    if self.stepCount == 10:
-        self.stepCount = 0
-        self.localDone = True
+    return self.getLocalView(), self.originalReward, self.fovealReward, self.isFovealEpisodeFinished(), self.isEpisodeFinished("print"), msg
 
-    return self.getLocalView(), self.reward, self.isEpisodeFinished(), self.localDone, msg
+  """    
+  """
+  def getGlobalView(self):
 
+      self.state1 = np.concatenate(
+          (np.reshape(self.state[0 * self.realgrid * self.realgrid: 1 * self.realgrid * self.realgrid],
+                      ((1, self.realgrid, self.realgrid))),
+           np.reshape(self.state[1 * self.realgrid * self.realgrid: 2 * self.realgrid * self.realgrid],
+                      ((1, self.realgrid, self.realgrid))),
+           np.reshape(self.state[2 * self.realgrid * self.realgrid: 3 * self.realgrid * self.realgrid],
+                      ((1, self.realgrid, self.realgrid))),
+           np.reshape(self.state[3 * self.realgrid * self.realgrid: 4 * self.realgrid * self.realgrid],
+                      ((1, self.realgrid, self.realgrid)))), axis=0)
 
+      self.retState = np.asarray(self.state1[:, self.ball_x0 - 2:self.ball_x0 + 3, self.ball_y0 - 2:self.ball_y0 + 3])
 
+      self.retStateExpanded = np.zeros((4, self.retState.shape[1] * self.expansionRatio,
+                                   self.retState.shape[2] * self.expansionRatio), dtype=np.float32)
+      channel = 0
+      while channel < self.retState.shape[0]:
+          i = 0
+          while i < self.retState.shape[1]:
+              ii = 0
+              for ii in range(0, self.expansionRatio):
+                  j = 0
+                  while j < self.retState.shape[2]:
+                      jj = 0
+                      for jj in range(0, self.expansionRatio):
+                          self.retStateExpanded[channel][i * self.expansionRatio + ii][j * self.expansionRatio + jj] = \
+                          self.retState[channel][i][j]
+                          jj += 1
+                      j += 1
+                  ii += 1
+              i += 1
+          channel += 1
 
+      return self.retStateExpanded
 
+  """    
+  """
+  def getLocalView(self):
 
+      localGoal = np.zeros((self.realgrid*self.realgrid))
+      localGoal[self.f_goal_x * self.realgrid + self.f_goal_y] = 1.0
 
+      self.state1 = np.concatenate(
+          (np.reshape(self.state[0 * self.realgrid * self.realgrid: 1 * self.realgrid * self.realgrid],
+                      ((1, self.realgrid, self.realgrid))),
+           np.reshape(self.state[1 * self.realgrid * self.realgrid: 2 * self.realgrid * self.realgrid],
+                      ((1, self.realgrid, self.realgrid))),
+           np.reshape(localGoal,((1, self.realgrid, self.realgrid))),
+           np.reshape(self.state[3 * self.realgrid * self.realgrid: 4 * self.realgrid * self.realgrid],
+                      ((1, self.realgrid, self.realgrid)))), axis=0)
 
+      self.retState = np.asarray(self.state1[:, self.ball_x0 - 2:self.ball_x0 + 3, self.ball_y0 - 2:self.ball_y0 + 3])
 
+      self.retStateExpanded = np.zeros((4, self.retState.shape[1] * self.expansionRatio, self.retState.shape[2] * self.expansionRatio),
+                                  dtype=np.float32)
 
+      channel = 0
+      while channel < self.retState.shape[0]:
+          i = 0
+          while i < self.retState.shape[1]:
+              ii = 0
+              for ii in range(0, self.expansionRatio):
+                  j = 0
+                  while j < self.retState.shape[2]:
+                      jj = 0
+                      for jj in range(0, self.expansionRatio):
+                          self.retStateExpanded[channel][i * self.expansionRatio + ii][j * self.expansionRatio + jj] = \
+                          self.retState[channel][i][j]
+                          jj += 1
+                      j += 1
+                  ii += 1
+              i += 1
+          channel += 1
 
+      return self.retStateExpanded
 
-    """    
-    """
+  """    
+  """
+  def render(self, mode='human', close=False):
+    if(mode == 'human'):
+        self.VISUALIZE = True
+
+  """    
+  """
   def initState(self):
-    return self.state, self.reward, self.isEpisodeFinished(), {'newState' : True}
+    return self.state, self.originalReward, self.isEpisodeFinished(), {'newState' : True}
 
+  """    
+  """
+  def isEpisodeFinished(self, queryType="plain"):
+    if self.originalReward == self.positiveFull or self.stepCount == 200:
+        """
+        if self.originalReward == self.positiveFull and queryType == "print":
+            print(" =====================> Global Episode Done due to Global Goal Reached", self.originalReward, self.fovealReward)
+        if self.stepCount == 200 and queryType == "print":
+            print(" =====================> Global Episode Done due to Max Steps", self.originalReward, self.fovealReward)
+        #self.stepCount = 0
+        """
+        return True
+    return False
 
-  def isEpisodeFinished(self):
-    if self.reward == self.positiveFull:
+  """    
+  """
+  def isFovealEpisodeFinished(self):
+    if self.localDone or self.fovealReward == self.positiveFull or self.fovealStepCount == 10 or self.isEpisodeFinished():
+        """
+        if self.localDone and self.fovealReward == self.positiveNominal:
+            print("Local Episode Done due to Goal out of fovea", self.originalReward, self.fovealReward)
+        elif self.fovealStepCount == 10:
+            print("Local Episode Done due to Max Steps", self.originalReward, self.fovealReward)
+        elif self.isEpisodeFinished():
+            print("Local Episode Done due to Global Episode", self.originalReward, self.fovealReward)
+        elif self.fovealReward == self.positiveFull:
+            print("Local Episode Done due to foveal Goal Acheived", self.originalReward, self.fovealReward)
+        else:
+            print("Local Episode Done due to unknown reason", self.originalReward, self.fovealReward)
+        """
+        self.localDone = False
         return True
     return False
