@@ -3,11 +3,14 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 import numpy as np
 import random
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import os
 import time
-plt.ion()
-plt.show(block=False)
+import cv2
+
+
+#plt.ion()
+#plt.show(block=False)
 
 
 
@@ -44,6 +47,7 @@ class LmazeEnv_v2(gym.Env):
     self.positiveFull = 1.0
     self.RANDOM_BALL = True
     self.AUTO_VISUALIZE = False
+    self.SAVEFRAME = False
     self.VISUALIZE = False
     self.f_goal_x = 0
     self.f_goal_y = 0
@@ -80,9 +84,7 @@ class LmazeEnv_v2(gym.Env):
 
     self.retStateExpanded = np.zeros((self.stateChannel, self.fovea * self.expansionRatio,
                                       self.fovea * self.expansionRatio), dtype=np.float32)
-
-    #self.fig, self.ax = plt.subplots()
-
+    self.dir = "."
     self.reset()
 
 
@@ -93,7 +95,7 @@ class LmazeEnv_v2(gym.Env):
   """             Reset-Initialize Handle           """
   """    
   """
-  def reset(self):                        # just reset
+  def resetAlt(self):                        # just reset
 
     #print("createing dir")
     self.dir = "dir"+str(int(time.time()*1000))
@@ -145,6 +147,91 @@ class LmazeEnv_v2(gym.Env):
                             retState[channel][i][j]
 
 
+
+
+
+    return self.retStateExpanded
+
+
+
+  """             Reset-Initialize Handle           """
+  """    
+  """
+  def reset(self):                        # just reset
+
+    if self.SAVEFRAME:
+        print("creating directory")
+        self.dir = "dir"+str(int(time.time()*1000))
+        os.makedirs(self.dir)
+
+
+    self.state = np.zeros((self.channel, self.realgrid, self.realgrid), dtype=np.float32)
+    self.originalReward = -0.0
+    self.fovealReward = -0.0
+    self.stepCount = 0
+    self.img = None
+
+    action_value = np.zeros((self.actionChannel, self.fovea, self.fovea), dtype=np.float32)
+
+    s1 = np.where(self.grid == 'X')
+    self.goal_x = s1[0][0]
+    self.goal_y = s1[1][0]
+
+    if self.RANDOM_BALL:
+        x, y = 0, 0
+        while self.grid[x][y] == 'W' or self.grid[x][y] == 'X':
+            x = random.randint(1, self.realgrid - 2)
+            y = random.randint(1, self.realgrid - 2)
+        self.ball_x0, self.ball_y0 = x, y
+
+    else:
+        start = np.where(self.grid == 'S')
+        self.ball_x0, self.ball_y0 = start[0][0], start[1][0]
+
+    self.state[0] = [[1.0 if cell == "B" or cell == "S" or cell == "X" else 0.0 for cell in row] for row in self.grid]
+    self.state[1] = [[1.0 if cell == "X" else 0.0 for cell in row] for row in self.grid]
+
+    self.image_wall_previous = np.zeros((self.fovea, self.fovea))
+    self.image_goal_previous = np.zeros((self.fovea, self.fovea))
+    self.image_global_goal = np.zeros((self.fovea, self.fovea))
+    self.image_wall_current = np.zeros((self.fovea, self.fovea))
+    self.image_goal_current = np.zeros((self.fovea, self.fovea))
+
+    self.image_wall_previous = np.asarray(self.state[0, self.ball_x0 - 2 : self.ball_x0 + 3, self.ball_y0 - 2 : self.ball_y0 + 3])
+    self.image_wall_current = np.asarray(self.state[0, self.ball_x0 - 2 : self.ball_x0 + 3, self.ball_y0 - 2 : self.ball_y0 + 3])
+    self.image_goal_previous[2, 2] =  1.0
+    self.image_goal_current[2, 2] = 1.0
+    self.image_global_goal = np.asarray(self.state[1, self.ball_x0 - 2 : self.ball_x0 + 3, self.ball_y0 - 2 : self.ball_y0 + 3])
+
+    #print(self.image_wall_previous.shape)
+    #print(self.image_wall_current.shape)
+    #print(self.image_goal_previous.shape)
+    #print(self.image_goal_current.shape)
+    #print(self.image_global_goal.shape)
+
+    if self.state_type == "oneState":
+        retState = np.concatenate([np.expand_dims(self.image_wall_current, axis=0),
+                                   np.expand_dims(self.image_goal_current, axis=0)], axis=0)
+    elif self.state_type == "twoState":
+        retState = np.concatenate([np.expand_dims(self.image_wall_current, axis=0),
+                                   np.expand_dims(self.image_goal_current, axis=0),
+                                   np.expand_dims(self.image_global_goal, axis=0),
+                                   np.expand_dims(self.image_wall_previous,  axis=0),
+                                   np.expand_dims(self.image_goal_previous, axis=0)], axis=0)
+
+    #print(retState.shape)
+    for channel in range(0, retState.shape[0]):
+        for i in range(0, retState.shape[1]):
+            for ii in range(0, self.expansionRatio):
+                for j in range(0, retState.shape[2]):
+                    for jj in range(0, self.expansionRatio):
+                        self.retStateExpanded[channel][i * self.expansionRatio + ii][j * self.expansionRatio + jj] = \
+                            retState[channel][i][j]
+
+
+
+
+
     return self.retStateExpanded
 
 
@@ -153,10 +240,168 @@ class LmazeEnv_v2(gym.Env):
   """
 
   def rendering(self, msg):
+      #print("Rendering")
       self.VISUALIZE = msg
 
+  def writing(self, msg):
+      #print("Writing")
+      self.SAVEFRAME = msg
 
   def step(self, goal):
+      self.originalReward = -0.0
+      self.stepCount += 1
+
+      image_wall_previous_ = np.zeros((self.fovea*self.expansionRatio, self.fovea*self.expansionRatio))
+      image_goal_previous_ = np.zeros((self.fovea*self.expansionRatio, self.fovea*self.expansionRatio))
+      image_global_goal_ = np.zeros((self.fovea*self.expansionRatio, self.fovea*self.expansionRatio))
+      image_wall_current_ = np.zeros((self.fovea*self.expansionRatio, self.fovea*self.expansionRatio))
+      image_goal_current_ = np.zeros((self.fovea*self.expansionRatio, self.fovea*self.expansionRatio))
+
+      self.f_goal_x = self.ball_x0 + int(goal / self.fovea) - 2
+      self.f_goal_y = self.ball_y0 + int(goal % self.fovea) - 2
+
+      if self.f_goal_x < self.realgrid - 2 and self.f_goal_x > 1:
+          line2x = str(self.ball_x0) + " + " + str(int(goal / self.fovea) - 2) + " = " + str(self.f_goal_x)
+          self.ball_x0 = self.f_goal_x
+      else:
+          if self.f_goal_x >= self.realgrid - 2:
+              line2x = str(self.ball_x0) + " + " + str(int(goal / self.fovea) - 2) + " = " + str(self.realgrid - 3) + " (Clipping) "
+              self.ball_x0 = self.realgrid - 3
+          if self.f_goal_x <= 1:
+              line2x = str(self.ball_x0) + " + " + str(int(goal / self.fovea) - 2) + " = " + str(2) + " (Clipping) "
+              self.ball_x0 = 2
+
+      if self.f_goal_y < self.realgrid - 2 and self.f_goal_y > 1:
+          line2y = str(self.ball_y0) + " + " + str(int(goal % self.fovea) - 2) + " = " + str(self.f_goal_y)
+          self.ball_y0 = self.f_goal_y
+      else:
+          if self.f_goal_y >= self.realgrid - 2:
+              line2y = str(self.ball_y0) + " + " + str(int(goal % self.fovea) - 2) + " = " + str(self.realgrid - 3) + " (Clipping) "
+              self.ball_y0 = self.realgrid - 3
+          if self.f_goal_y <= 1:
+              line2y = str(self.ball_y0) + " + " + str(int(goal % self.fovea) - 2) + " = " + str(2) + " (Clipping) "
+              self.ball_y0 = 2
+
+      if self.grid[self.f_goal_x][self.f_goal_y] == 'X':
+          self.originalReward = self.positiveFull
+      elif self.grid[self.f_goal_x][self.f_goal_y] == 'W':
+          self.originalReward = self.negativeNominal
+      elif self.grid[self.f_goal_x][self.f_goal_y] == 'B' or self.grid[self.f_goal_x][self.f_goal_y] == 'S':
+          self.originalReward = self.positiveNominal
+
+      self.image_wall_current = np.asarray(self.state[0, self.ball_x0 - 2 : self.ball_x0 + 3, self.ball_y0 - 2 : self.ball_y0 + 3])
+      self.image_goal_current = np.zeros((self.fovea, self.fovea))
+      self.image_goal_current[int(goal / self.fovea), int(goal % self.fovea)] = 1.0
+      self.image_global_goal = np.asarray(self.state[1, self.ball_x0 - 2 : self.ball_x0 + 3, self.ball_y0 - 2 : self.ball_y0 + 3])
+
+      if self.state_type == "oneState":
+          retState = np.concatenate([np.expand_dims(self.image_wall_current, axis=0),
+                                   np.expand_dims(self.image_goal_current, axis=0)], axis=0)
+      elif self.state_type == "twoState":
+          retState = np.concatenate([np.expand_dims(self.image_wall_current, axis=0),
+                                   np.expand_dims(self.image_goal_current, axis=0),
+                                   np.expand_dims(self.image_global_goal, axis=0),
+                                   np.expand_dims(self.image_wall_previous,  axis=0),
+                                   np.expand_dims(self.image_goal_previous, axis=0)], axis=0)
+
+      for channel in range(0, retState.shape[0]):
+          for i in range(0, retState.shape[1]):
+              for ii in range(0, self.expansionRatio):
+                  for j in range(0, retState.shape[2]):
+                      for jj in range(0, self.expansionRatio):
+                          self.retStateExpanded[channel][i * self.expansionRatio + ii][j * self.expansionRatio + jj] = \
+                              retState[channel][i][j]
+
+
+      if self.VISUALIZE:
+          #
+          # Build the global view
+          #
+          #print("saving image")
+          image3 = np.zeros((self.realgrid*self.expansionRatio, self.realgrid*self.expansionRatio))
+          image3_ = np.asarray(([[200 if item == 1.0 else 0 for item in line] for line in self.state[0]]), dtype=np.uint8)
+          image3_[self.goal_x, self.goal_y] = 100
+          image3_[self.f_goal_x, self.f_goal_y] = 50
+          image3_[self.ball_x0, self.ball_y0] = 150
+          #
+          #
+          for i in range(0, image3_.shape[0]):
+              for ii in range(0, self.expansionRatio):
+                  for j in range(0, image3_.shape[1]):
+                      for jj in range(0, self.expansionRatio):
+                          image3[i * self.expansionRatio + ii][j * self.expansionRatio + jj] = image3_[i][j]
+
+          for i in range(0, self.image_wall_previous.shape[0]):
+              for ii in range(0, self.expansionRatio):
+                  for j in range(0, self.image_wall_previous.shape[1]):
+                      for jj in range(0, self.expansionRatio):
+                          image_wall_previous_[i * self.expansionRatio + ii][j * self.expansionRatio + jj] = self.image_wall_previous[i][j]
+                          image_goal_previous_[i * self.expansionRatio + ii][j * self.expansionRatio + jj] = self.image_goal_previous[i][j]
+                          image_wall_current_[i * self.expansionRatio + ii][j * self.expansionRatio + jj] = self.image_wall_current[i][j]
+                          image_goal_current_[i * self.expansionRatio + ii][j * self.expansionRatio + jj] = self.image_goal_current[i][j]
+                          image_global_goal_[i * self.expansionRatio + ii][j * self.expansionRatio + jj] = self.image_global_goal[i][j]
+
+          image_wall_previous_ = np.asarray(([[200 if item == 1.0 else 0 for item in line] for line in image_wall_previous_]), dtype=np.uint8)
+          image_goal_previous_ = np.asarray(([[200 if item == 1.0 else 0 for item in line] for line in image_goal_previous_]), dtype=np.uint8)
+          image_wall_current_ = np.asarray(([[200 if item == 1.0 else 0 for item in line] for line in image_wall_current_]), dtype=np.uint8)
+          image_goal_current_ = np.asarray(([[200 if item == 1.0 else 0 for item in line] for line in image_goal_current_]), dtype=np.uint8)
+          image_global_goal_ = np.asarray(([[200 if item == 1.0 else 0 for item in line] for line in image_global_goal_]), dtype=np.uint8)
+
+          ''' Arrange the visualization here '''
+          imagel1 = np.concatenate([self.boundary, self.boundary,
+                                    image_wall_previous_,
+                                    self.boundary, self.boundary, self.boundary, self.boundary,
+                                    image_goal_previous_,
+                                    self.boundary, self.boundary ], axis = 1)
+
+          imagel2 = np.concatenate([self.boundary, self.boundary,
+                                    image_wall_current_,
+                                    self.boundary, self.boundary, self.boundary, self.boundary,
+                                    image_goal_current_,
+                                    self.boundary, self.boundary ], axis = 1)
+
+          imagel3 = np.concatenate([self.boundary, self.boundary, self.boundary, self.boundary, self.boundary, self.boundary ,self.boundary ,
+                                    image_global_goal_,
+                                    self.boundary, self.boundary, self.boundary, self.boundary, self.boundary, self.boundary ], axis = 1)
+
+          image = np.concatenate([self.lowerboundary,
+                                  self.lowerboundary,
+                                  self.lowerboundary,
+                                  self.lowerboundary,
+                                  self.lowerboundary,
+                                  image3,
+                                  self.lowerboundary,
+                                  imagel1,
+                                  self.lowerboundary,
+                                  imagel2,
+                                  self.lowerboundary,
+                                  imagel3,
+                                  self.lowerboundary], axis = 0)
+
+          # (200,255,155)
+          font = cv2.FONT_HERSHEY_SIMPLEX
+          line1 = "Step Number : " + str(self.stepCount)
+
+          cv2.putText(image,line1,(5,10), font, 0.3, (0,0,0), 1, cv2.LINE_AA)
+          cv2.putText(image,line2x,(5,20), font, 0.3, (0,0,0), 1, cv2.LINE_AA)
+          cv2.putText(image,line2y,(5,30), font, 0.3, (0,0,0), 1, cv2.LINE_AA)
+          cv2.imshow('image',image)
+          cv2.imwrite(self.dir+"/image"+ str(self.stepCount)+".png", image)
+          cv2.waitKey(1)
+          time.sleep(1)
+
+      self.image_goal_previous = self.image_goal_current
+      self.image_wall_previous = self.image_wall_current
+
+      if self.originalReward == self.positiveFull or self.stepCount > 100:
+        #if self.originalReward == self.positiveFull:
+        return self.retStateExpanded, self.originalReward, True, goal
+      else :
+        return self.retStateExpanded, self.originalReward, False, goal
+
+
+
+  def stepAlt(self, goal):
       #
       self.originalReward = -0.0
       self.stepCount += 1
@@ -300,6 +545,8 @@ class LmazeEnv_v2(gym.Env):
           #
           #image = np.concatenate([self.boundary,self.boundary,self.boundary, image1, self.boundary, self.boundary, image2, self.boundary,self.boundary,self.boundary], axis = 1)
           #image = np.concatenate([image3, self.lowerboundary, image, self.lowerboundary], axis = 0)
+
+          ''' Arrange the visualization here '''
           imagel1 = np.concatenate([self.boundary, self.boundary, image_agent_current, self.boundary, self.boundary,
                                     self.boundary, self.boundary, image_agent_goal, self.boundary, self.boundary ], axis = 1)
 
@@ -314,19 +561,21 @@ class LmazeEnv_v2(gym.Env):
           # Plot the image
           #
 
-          if self.img == None:
-              plt.clf()
-              self.img = plt.imshow(image)
-          else:
-              self.img.set_data(image)
+          #if self.img == None:
+          #    plt.clf()
+          #    self.img = plt.imshow(image)
+          #else:
+          #    self.img.set_data(image)
 
-          title = "Step Number : " + str(self.stepCount) + \
-                  "\nAction : "+ str(goal) +" (" + str(int(goal / self.fovea)) + ", " + str(int(goal % self.fovea)) + ")"
+          #title = "Step Number : " + str(self.stepCount) + \
+          #        "\nAction : "+ str(goal) +" (" + str(int(goal / self.fovea)) + ", " + str(int(goal % self.fovea)) + ")"
 
-          plt.title(title)
-          plt.savefig(self.dir+"/image"+ str(self.stepCount)+".png")
-          plt.pause(0.5)
-          plt.draw()
+          #plt.title(title)
+          #plt.savefig(self.dir+"/image"+ str(self.stepCount)+".png")
+          #plt.pause(0.5)
+          #plt.draw()
+          cv2.imshow('i',image)
+          cv2.waitKey(1)
 
 
       self.goal_x0 = int(goal/self.fovea)
