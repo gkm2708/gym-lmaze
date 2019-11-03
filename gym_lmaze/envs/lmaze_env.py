@@ -3,9 +3,8 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 import numpy as np
 import random
-import matplotlib.pyplot as plt
-plt.ion()
-plt.show(block=False)
+import cv2
+
 
 class LmazeEnv(gym.Env):
   metadata = {'render.modes': ['human']}
@@ -18,11 +17,11 @@ class LmazeEnv(gym.Env):
     self.gridsize = self.realgrid * self.expansionRatio
     self.observation_space = gym.spaces.Box(0.0, 1.0, shape=(4,self.gridsize,self.gridsize))
     self.negativeNominal = -1.0
-    self.positiveNominal = 0.01
-    self.positiveFull = 1.0
+    self.positiveNominal = -0.01
+    self.positiveFull = 100.0
     self.goalCount = 0
     self.RANDOM_BALL = True
-    self.VISUALIZE = True
+    self.VISUALIZE = False
 
     """self.gri = np.array(  [['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
                             ['W', 'S', 'B', 'B', 'B', 'W', 'W', 'B'],
@@ -64,6 +63,8 @@ class LmazeEnv(gym.Env):
     #print("RESET")
 
     self.state = np.zeros((self.realgrid * self.realgrid * 4), dtype=np.float32)
+
+    # Layer 1 for ball position
     if self.RANDOM_BALL:
         x = 0
         y = 0
@@ -74,6 +75,8 @@ class LmazeEnv(gym.Env):
         self.ball_x0 = x
         self.ball_y0 = y
 
+        self.state[self.realgrid * self.ball_x0  +  self.ball_y0] = 1.0
+
     else:
         self.state[0 * self.realgrid * self.realgrid : 1 * self.realgrid * self.realgrid] = np.reshape(
             np.asarray([[1.0 if cell == "S" else 0.0 for cell in row] for row in self.grid]),
@@ -83,10 +86,11 @@ class LmazeEnv(gym.Env):
         self.ball_x0 = start[0][0]
         self.ball_y0 = start[1][0]
 
+    # Layer 2 for Walls
     self.state[1 * self.realgrid * self.realgrid : 2 * self.realgrid * self.realgrid] = np.reshape(
             np.asarray([[1.0 if cell == "W" else 0.0 for cell in row] for row in self.grid]),
             (-1))
-
+    # Layer 3 for Goal
     self.state[2 * self.realgrid * self.realgrid : 3 * self.realgrid * self.realgrid] = np.reshape(
             np.asarray([[1.0 if cell == "X" else 0.0 for cell in row] for row in self.grid]),
             (-1))
@@ -95,6 +99,7 @@ class LmazeEnv(gym.Env):
     self.goal_x = s1[0][0]
     self.goal_y = s1[1][0]
 
+    # Layer 4 for blanks
     self.state[3 * self.realgrid * self.realgrid : 4 * self.realgrid * self.realgrid] = np.reshape(
             np.asarray([[1.0 if cell == "B" else 0.0 for cell in row] for row in self.grid]),
             (-1))
@@ -138,6 +143,8 @@ class LmazeEnv(gym.Env):
   """
   def step(self,msg):
 
+    msg = int(msg)
+    #print(msg)
     """ Build Action Value to be used for ball position update """
     self.stepCount += 1
 
@@ -184,7 +191,7 @@ class LmazeEnv(gym.Env):
         self.state[0*self.realgrid*self.realgrid+(self.ball_x0)*self.realgrid+self.ball_y0] = 1.0
         self.reward = self.positiveFull
         self.goalCount += 1
-        print("Goal Hit Count ",self.goalCount)
+        #print("Goal Hit Count ",self.goalCount)
 
     if self.VISUALIZE:
         image = np.asarray(([200 if item == 1.0 else 0 for item in self.state[1 * self.realgrid * self.realgrid : 2 * self.realgrid * self.realgrid]]), dtype=np.uint8)
@@ -192,14 +199,9 @@ class LmazeEnv(gym.Env):
         image[(self.ball_x0) * self.realgrid + self.ball_y0] = 150
 
         image2 = np.reshape(image,(self.realgrid,self.realgrid))
-        if self.img == None:
-            plt.clf()
-            self.img = plt.imshow(image2)
-        else:
-            self.img.set_data(image2)
-
-        plt.pause(.01)
-        plt.draw()
+        cv2.imshow('image',image2)
+        #cv2.imwrite(self.dir+"/image"+ str(self.stepCount)+".png", image)
+        cv2.waitKey(1)
 
     retState = np.concatenate((np.reshape(self.state[0 * self.realgrid * self.realgrid : 1 * self.realgrid * self.realgrid],
                      ((1,self.realgrid,self.realgrid))),
@@ -229,15 +231,25 @@ class LmazeEnv(gym.Env):
             i += 1
         channel += 1
 
+    #print (retStateExpanded.shape)
     return retStateExpanded, self.reward, self.isEpisodeFinished(), msg
 
-    """    
-    """
+
+
+
+
   def initState(self):
     return self.state, self.reward, self.isEpisodeFinished(), {'newState' : True}
-
 
   def isEpisodeFinished(self):
     if self.reward == self.positiveFull or self.stepCount == 100:
         return True
     return False
+
+  def rendering(self, msg):
+      self.VISUALIZE = msg
+      #print(self.VISUALIZE)
+
+  def writing(self, msg):
+      self.SAVEFRAME = msg
+
