@@ -6,6 +6,8 @@ import random
 import cv2
 
 
+# full view
+
 class LmazeEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 

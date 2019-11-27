@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 plt.ion()
 plt.show(block=False)
 
+
+# foveal view old logic for baseline
+
+
 class LmazeEnv_v1(gym.Env):
   metadata = {'render.modes': ['human']}
 

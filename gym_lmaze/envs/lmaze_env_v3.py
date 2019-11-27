@@ -12,7 +12,7 @@ import cv2
 #plt.ion()
 #plt.show(block=False)
 
-
+# full view another logic but not used
 
 class LmazeEnv_v3(gym.Env):
   metadata = {'render.modes': ['human']}
