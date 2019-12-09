@@ -28,3 +28,7 @@ register(
     id='lmaze-v5',
     entry_point='gym_lmaze.envs:LmazeEnv_v5',
 )
+register(
+    id='lmaze-v6',
+    entry_point='gym_lmaze.envs:LmazeEnv_v6',
+)

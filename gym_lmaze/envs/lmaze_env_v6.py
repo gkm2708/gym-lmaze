@@ -14,7 +14,7 @@ import cv2
 # foveal view new logic for Rainbow
 
 
-class LmazeEnv_v5(gym.Env):
+class LmazeEnv_v6(gym.Env):
 
   """    
   """
@@ -247,6 +247,7 @@ class LmazeEnv_v5(gym.Env):
           self.ball_x0 = ballNew_x
           self.ball_y0 = ballNew_y
 
+      
       #
       #     planning level
       #
@@ -417,18 +418,21 @@ class LmazeEnv_v5(gym.Env):
                       image1[i * self.expansionRatio + ii][j * self.expansionRatio + jj] = image[i][j]
 
       cv2.rectangle(image1, (self.fovea_y0 * self.expansionRatio - 14, self.fovea_x0 * self.expansionRatio - 14),
-                (self.fovea_y0 * self.expansionRatio + 21, self.fovea_x0 * self.expansionRatio + 21), (150, 150, 00), 1)
+                (self.fovea_y0 * self.expansionRatio + 21, self.fovea_x0 * self.expansionRatio + 21),
+                (50, 50, 00), 1)
 
       cv2.circle(image1, (self.ball_y0 * self.expansionRatio + 3, self.ball_x0 * self.expansionRatio + 3), 3,
-             (150, 150, 00), -1)
-
-      cv2.rectangle(image1, (self.fovea_y1 * self.expansionRatio - 14, self.fovea_x1 * self.expansionRatio - 14),
-                (self.fovea_y1 * self.expansionRatio + 21, self.fovea_x1 * self.expansionRatio + 21), (50, 50, 00), 1)
-
-      cv2.circle(image1, (self.fovea_y1 * self.expansionRatio + 3, self.fovea_x1 * self.expansionRatio + 3), 3,
              (50, 50, 00), -1)
 
-      cv2.circle(image1, (self.goal_y * self.expansionRatio + 3, self.goal_x * self.expansionRatio + 3), 3, (0, 0, 0), -1)
+      cv2.rectangle(image1, (self.fovea_y1 * self.expansionRatio - 14, self.fovea_x1 * self.expansionRatio - 14),
+                (self.fovea_y1 * self.expansionRatio + 21, self.fovea_x1 * self.expansionRatio + 21),
+                    (150, 150, 00), 1)
+
+      cv2.circle(image1, (self.fovea_y1 * self.expansionRatio + 3, self.fovea_x1 * self.expansionRatio + 3), 3,
+             (150, 150, 00), -1)
+
+      cv2.circle(image1, (self.goal_y * self.expansionRatio + 3, self.goal_x * self.expansionRatio + 3), 3,
+                 (0, 0, 0), -1)
 
 
 
@@ -446,16 +450,16 @@ class LmazeEnv_v5(gym.Env):
                       image2[i * self.expansionRatio + ii][j * self.expansionRatio + jj] = image[i][j]
 
       cv2.circle(image2, (self.ball_y0 * self.expansionRatio + 3, self.ball_x0 * self.expansionRatio + 3), 3,
-             (200, 200, 00), -1)
+             (50, 50, 00), -1)
 
       cv2.circle(image2, (self.ball_y1 * self.expansionRatio + 3, self.ball_x1 * self.expansionRatio + 3), 3,
              (150, 150, 00), -1)
 
       cv2.circle(image2, (self.f_goal_y0 * self.expansionRatio + 3, self.f_goal_x0 * self.expansionRatio + 3), 3,
-             (100, 100, 00), -1)
+             (200, 200, 00), -1)
 
       cv2.circle(image2, (self.goal_y * self.expansionRatio + 3, self.goal_x * self.expansionRatio + 3), 3,
-            (50, 50, 0), -1)
+            (0, 0, 0), -1)
 
 
 
@@ -499,7 +503,24 @@ class LmazeEnv_v5(gym.Env):
   """    
   """
   def safeFovealGoal(self):
-      print("return a safe foveal goal for training local agent ")
+      #print("return a safe foveal goal for training local agent ")
+      #print(self.ball_x0)
+      #print(self.ball_y0)
+      
+      self.smallGrid = np.asarray(self.grid[self.ball_x0 - int(self.fovea/2) : self.ball_x0 + int(self.fovea/2) + 1,self.ball_y0 - int(self.fovea/2) : self.ball_y0 + int(self.fovea/2) + 1])
+      
+
+      action_local = np.random.randint(0, 25)
+
+      
+      while self.smallGrid[int(action_local/self.fovea)][action_local%self.fovea] == 'W': 
+          action_local = np.random.randint(0, 25)
+
+      #print(self.smallGrid)
+      #print(action_local)
+      #print(int(action_local/self.fovea), action_local%self.fovea)
+      
+      return action_local
 
 
   """    
