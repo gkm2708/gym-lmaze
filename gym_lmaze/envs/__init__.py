@@ -5,3 +5,5 @@ from gym_lmaze.envs.lmaze_env_v3 import LmazeEnv_v3
 from gym_lmaze.envs.lmaze_env_v4 import LmazeEnv_v4
 from gym_lmaze.envs.lmaze_env_v5 import LmazeEnv_v5
 from gym_lmaze.envs.lmaze_env_v6 import LmazeEnv_v6
+from gym_lmaze.envs.lmaze_env_v7 import LmazeEnv_v7
+
